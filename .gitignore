@@ -1,0 +1,9 @@
+# Arquivo de Segredos do Firebase
+services/
+*.json
+
+# Variáveis de Ambiente
+.env
+
+# Dependências do Node
+node_modules/
