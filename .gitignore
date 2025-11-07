@@ -1,9 +1,13 @@
-# Arquivo de Segredos do Firebase
-services/
-*.json
+# Dependências do Node
+node_modules/
 
 # Variáveis de Ambiente
 .env
 
-# Dependências do Node
-node_modules/
+# Arquivo de Segredos do Firebase
+# Ignora a pasta 'services' inteira
+services/
+
+# Se o seu arquivo .json NÃO estiver na pasta 'services',
+# adicione o nome completo dele aqui, por exemplo:
+# fgcbrasil-banco-firebase-adminsdk-fbsvc-c0220b5e9b.json
