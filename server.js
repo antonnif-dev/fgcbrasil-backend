@@ -87,7 +87,8 @@ app.get('/api', (req, res) => {
 
 // --- (SUBSTITUA A ROTA /api/users/register) ---
 app.post('/api/users/register', async (req, res) => {
-  const { uid, email, nome, tipo } = req.body;
+  // --- CAMPOS ADICIONADOS ---
+  const { uid, email, nome, tipo, profileImageUrl, teamName } = req.body;
   
   if (!uid || !email || !nome || !tipo) {
     return res.status(400).send({ error: 'Dados incompletos para registro' });
@@ -110,7 +111,7 @@ app.post('/api/users/register', async (req, res) => {
         adminUserId: uid,
         criadoEm: admin.firestore.FieldValue.serverTimestamp(),
         xpBase: 1000,
-        imagemUrl: '',
+        imagemUrl: profileImageUrl || '', // Usa a imagem do registro
       });
       
       await auth.setCustomUserClaims(uid, { admin: true });
@@ -129,9 +130,9 @@ app.post('/api/users/register', async (req, res) => {
       campeonatosParticipados: [],
       contribuicoes: [],
       missoesCompletas: [],
-      // --- CAMPOS ADICIONADOS ---
-      profileImageUrl: '', // URL da foto de perfil
-      teamName: '',        // Nome da equipe (para jogadores)
+      // --- CAMPOS ADICIONADOS (com valores padrão) ---
+      profileImageUrl: profileImageUrl || '', 
+      teamName: teamName || '',
       // --- FIM ---
       criadoEm: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -1012,27 +1013,45 @@ app.put('/api/organizacoes/:id', checkAuth, checkAdmin, async (req, res) => {
 
 // [USUÁRIO LOGADO] Atualiza o perfil (foto, nome da equipe)
 app.put('/api/users/profile', checkAuth, async (req, res) => {
-  const { profileImageUrl, teamName } = req.body;
+  // --- CAMPO 'nome' ADICIONADO ---
+  const { profileImageUrl, teamName, nome } = req.body;
   const userId = req.user.uid;
+  const userData = req.user.data; 
 
-  // Verifica se os dados recebidos são válidos
-  if (typeof profileImageUrl !== 'string') {
-    return res.status(400).send({ error: 'URL da imagem de perfil inválida.' });
+  if (!nome || typeof profileImageUrl !== 'string') {
+    return res.status(400).send({ error: 'Nome e URL da imagem de perfil são necessários.' });
   }
 
   try {
+    const batch = db.batch();
+    
+    // 1. Atualiza o documento do USUÁRIO
     const userRef = db.collection('users').doc(userId);
     const updateData = {
-      profileImageUrl: profileImageUrl
+      profileImageUrl: profileImageUrl,
+      nome: nome // <-- CAMPO ADICIONADO
     };
-
-    // Só permite atualizar 'teamName' se o usuário for um jogador
-    // E se o campo 'teamName' foi realmente enviado (não é undefined)
-    if (req.user.data.tipo === 'jogador' && teamName !== undefined) {
+    if (userData.tipo === 'jogador' && teamName !== undefined) {
       updateData.teamName = teamName;
     }
+    batch.update(userRef, updateData);
+    
+    // 2. Se for um Organizador, atualize TAMBÉM o documento da Organização
+    if (userData.tipo === 'organizador' && userData.organizacaoId) {
+      const orgRef = db.collection('organizacoes').doc(userData.organizacaoId);
+      batch.update(orgRef, {
+        imagemUrl: profileImageUrl,
+        nome: nome // <-- CAMPO ADICIONADO
+      });
+    }
 
-    await userRef.update(updateData);
+    // 3. Atualiza o Perfil de Autenticação do Firebase (Display Name)
+    await auth.updateUser(userId, {
+      displayName: nome,
+      photoURL: profileImageUrl // O Auth também pode guardar a foto
+    });
+
+    await batch.commit(); 
     
     res.status(200).send({ message: 'Perfil atualizado com sucesso!' });
 
